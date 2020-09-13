@@ -1,0 +1,30 @@
+|rest all=true splunk_server=local count=0 /services/storage/investigation/investigation
+|eval matchfield=title
+
+|join matchfield [search `notable` 
+   |mvexpand notable_xref_id
+   |eval length = len(notable_xref_id) 
+   |where length>6 
+   |fields title notable_xref_id rule_name urgency
+   |transaction notable_xref_id
+   |eval matchfield=notable_xref_id ] 
+   |spath input=status 
+   |search {}.name=*
+   |mvexpand {}.name
+   |rename {}.name as status
+   |mvexpand {}.time 
+   |rename {}.time as time1 
+   |spath input=collaborators 
+   |mvexpand write 
+   |mvexpand name
+   |eval CreateTime=strftime(create_time,"%c")
+   |dedup CreateTime
+   |eval ModTime=strftime(mod_time,"%c")
+   |eval ClosedTimeRes=if(status="Closed",time1,"")
+   |eval ClosedTime=strftime(ClosedTimeRes, "%c")
+   |eval response_time=(time1-create_time)/60
+   |eval open_since=(now()-create_time)/60
+   |eval res_time=if(status="Closed",response_time,open_since)
+   |eval response_time1="~".round(res_time,0)." min"
+   |table title, name, description, creator,{}.name,{}.write,rule_name,urgency, status, CreateTime, ModTime, ClosedTime, response_time1 
+   |rename name as "Investigation Name", description as "Investigation Description", creator as "Investigation Creator", {}.name as "Collaborators", {}.write as "Write Permissions", status as "Investigation Status", CreateTime as "Creation Time", ModTime as "Modification Time", ClosedTime as "Closure Time", response_time1 as "Response Time/Opened Since" , rule_name as "Investigation Notable Events" , urgency as "Investigation Notable Events Urgency", title as "Investigation ID"
